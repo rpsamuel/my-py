@@ -6,9 +6,7 @@ import tempfile
 
 
 @contextlib.contextmanager
-def atomic_write(filename, text=True, keep=True,
-                 owner=None, group=None, perms=None,
-                 suffix='.bak', prefix='tmp'):
+def atomic_write(filename, text=True, keep=True,perms=None, suffix='.bak', prefix='tmp'):
     """Context manager for overwriting a file atomically.
 
     Usage:
@@ -46,36 +44,9 @@ def atomic_write(filename, text=True, keep=True,
     ending with ".bak". You can vary that by passing strings as the
     `suffix` and `prefix` arguments.
     """
-    t = (uid, gid, mod) = (owner, group, perms)
-    if any(x is None for x in t):
-        info = os.stat(filename)
-        if uid is None:
-            uid = info.st_uid
-        if gid is None:
-            gid = info.st_gid
-        if mod is None:
-            mod = stat.S_IMODE(info.st_mode)
+    
     path = os.path.dirname(filename)
     fd, tmp = tempfile.mkstemp(suffix=suffix, prefix=prefix, dir=path, text=text)
-    try:
-        replace = os.replace  # Python 3.3 and better.
-    except AttributeError:
-        if sys.platform == 'win32':
-            # FIXME This is definitely not atomic!
-            # But it's how (for example) Mercurial does it, as of 2016-03-23
-            # https://selenic.com/repo/hg/file/tip/mercurial/windows.py
-            def replace(source, destination):
-                assert sys.platform == 'win32'
-                try:
-                    os.rename(source, dest)
-                except OSError as err:
-                    if err.winerr != 183:
-                        raise
-                    os.remove(dest)
-                    os.rename(source, dest)
-        else:
-            # Atomic on POSIX. Not sure about Cygwin, OS/2 or others.
-            replace = os.rename
     try:
         with os.fdopen(fd, 'w' if text else 'wb') as f:
             yield f
@@ -83,8 +54,6 @@ def atomic_write(filename, text=True, keep=True,
         # POSIX systems, and Windows for Python 3.3 or higher.
         replace(tmp, filename)
         tmp = None
-        os.chown(filename, uid, gid)
-        os.chmod(filename, mod)
     finally:
         if (tmp is not None) and (not keep):
             # Silently delete the temporary file. Ignore any errors.
